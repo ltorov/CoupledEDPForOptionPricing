@@ -1,0 +1,82 @@
+ofstream ff("data.txt");
+ff << "t," << "L2errorTotal," << "L2erroru," << "L2errorv" << endl;
+
+// Parameters
+
+func u0 = x*(1.-x)*y*(1.-y);
+real dt = 0.01;
+real mu = 0.2;
+real T = 1.;
+real alpha = x;
+real beta = exp(y);
+real sigma = -4.;
+func s2 = x*x + y*y;
+func s1 = x+y;
+ 
+// Mesh
+
+border C1(t = 0., 1.){x = t; y = 0;}
+border C2(t = 0., 1.){x = 1; y = t;}
+border C3(t = 0., 1.){x = 1-t; y = 1;}
+border C4(t = 0., 1.){x = 0; y = 1-t;}
+mesh Th = buildmesh(C1(20)+C2(20)+C3(20)+C4(20));
+
+// Fespace
+fespace Vh(Th, P1);
+ Vh u=u0, uu, uold, f1;
+ Vh v=u0, vv, vold, f2;
+ 
+// Problem
+problem dHeat (u, v, uu, vv)
+   = int2d(Th)(
+          (u*uu+v*vv)
+        + dt*mu*s2*sigma*(dx(u)*dx(uu) + dy(u)*dy(uu)+dx(v)*dx(vv) + dy(v)*dy(vv))
+    )
+    + int2d(Th)(
+        - (uold*uu+vold*vv)
+        - dt*(f1*uu+f2*vv)
+    )
+    + int2d(Th)(
+          dt*(alpha*v*uu + beta*u*vv)
+    )
+    + int2d(Th)(
+          s1*(alpha*uu*(dx(u)+dy(u))+beta*vv*(dy(v)+dx(v)))
+    )
+    + on(1,2,3, 4, u=0,v=0)
+    ;
+
+// Time loop
+real t = 0;
+for(int m=0; m<=T/dt; m++){
+    // Update
+    t=t+dt;
+  
+    func usol = u0*exp(-2.*t);
+    func vsol = u0*t^(-2.);
+
+    func aux1 = 2.*sigma^(2.)*s2*(x*(1.-x)+y*(1.-y));
+    func aux2 = (1.-2.*x)*y*(1.-y)+(1.-2.*y)*x*(1.-x);
+  
+    f1 = exp(-2.*t)*(-2.*u0+aux1-alpha*aux2)+alpha*u0*t^(-2.);
+    f2 = t^(-2.)*(-2.*u0+aux1-beta*aux2)+beta*u0*exp(-2.*t);
+
+    uold = u;
+    vold =v;
+
+    // Solve
+    dHeat;
+
+    // Plot
+    plot([u,v]);
+
+    
+    // Error
+    real erroru = sqrt(int2d(Th)((u-usol)^2));
+    real errorv = sqrt(int2d(Th)((v-vsol)^2));
+    real errorTotal = sqrt(int2d(Th)((u-usol)^2+(v-vsol)^2));
+
+    cout << "t=" << t << " - L^2 Error total = " << sqrt(int2d(Th)((u-usol)^2+(v-vsol)^2)) << endl;
+   
+    // Export data
+    ff << t << "," << errorTotal << "," << erroru << "," << errorv << endl;
+    }
